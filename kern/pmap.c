@@ -97,11 +97,37 @@ boot_alloc(uint32_t n)
 		nextfree = ROUNDUP((char *) end, PGSIZE);
 	}
 
+	//																			cprintf("\n!%s %d!\n", nextfree, n);
 	// Allocate a chunk large enough to hold 'n' bytes, then update
 	// nextfree.  Make sure nextfree is kept aligned
 	// to a multiple of PGSIZE.
 	//
 	// LAB 2: Your code here.
+
+	// If n==0, returns the address of the next free page without allocating
+	// anything.
+	if(n == 0){ 
+		return nextfree;
+	}
+	
+	// If n>0, allocates enough pages of contiguous physical memory to hold 'n'
+	// bytes.  Doesn't initialize the memory.  Returns a kernel virtual address.
+	else{
+		// KERNBASE is 1111 0000 0000 0000 0000 0000 0000 0000
+		//         HEX    f    0    0    0    0    0    0    0
+		// LIMIT is    1111 1111 1111 1111 1111 1111 1111 1111
+		//         HEX    f    f    f    f    f    f    f    f
+		
+		// nextfree is already at a page granularity
+		uint32_t pageAddress = ROUNDUP(n, PGSIZE);
+		uint32_t finalAddress = ((uint32_t) nextfree + pageAddress);
+		
+		if(finalAddress >= 0xffffffff)
+			panic("out of memory\n");
+		
+		//cprintf("fin: %x\n", (int) finalAddress); // used this to identify which portion of memory the pages get allocated in
+		return (char *) finalAddress;
+	}
 
 	return NULL;
 }
@@ -125,13 +151,13 @@ mem_init(void)
 	i386_detect_memory();
 
 	// Remove this line when you're ready to test this function.
-	panic("mem_init: This function is not finished\n");
+	//panic("mem_init: This function is not finished\n");
 
 	//////////////////////////////////////////////////////////////////////
 	// create initial page directory.
 	kern_pgdir = (pde_t *) boot_alloc(PGSIZE);
 	memset(kern_pgdir, 0, PGSIZE);
-
+	
 	//////////////////////////////////////////////////////////////////////
 	// Recursively insert PD in itself as a page table, to form
 	// a virtual page table at virtual address UVPT.
@@ -150,6 +176,8 @@ mem_init(void)
 	// Your code goes here:
 
 
+
+	panic("mem_init: This function is not finished\n");
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
 	// up the list of free physical pages. Once we've done so, all further

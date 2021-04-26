@@ -114,6 +114,9 @@ monitor(struct Trapframe *tf)
 
 	cprintf("Welcome to the JOS kernel monitor!\n");
 	cprintf("Type 'help' for a list of commands.\n");
+	// Nikhil and I couldn't agree on whether chars and ints have same size
+	//cprintf("%d %d\n", sizeof(char), sizeof(int)); 
+	// Nikhil won lol
 
 
 	while (1) {
