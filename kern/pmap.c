@@ -192,6 +192,15 @@ mem_init(void)
 	// or page_insert
 	page_init();
 
+	cprintf("%p\n", &pages[1]);				// Address of page 1
+	cprintf("%p\n", pages[2].pp_link);		// pp_link of page 2
+	cprintf("%p\n", page_free_list);		
+	cprintf("%p\n", *page_free_list);
+	cprintf("%p\n", pages[npages].pp_link);
+	cprintf("%p\n", &pages[npages]);
+	cprintf("%p\n", pages[0].pp_link);
+	cprintf("%p\n", &pages[0]);
+
 	panic("mem_init: This function is not finished\n");
 
 	check_page_free_list(1);
@@ -292,6 +301,7 @@ page_init(void)
 		pages[i].pp_ref = 0;
 		pages[i].pp_link = page_free_list;
 		page_free_list = &pages[i];
+		//cprintf("%d -> %p\n", i, page_free_list);
 	}
 }
 
