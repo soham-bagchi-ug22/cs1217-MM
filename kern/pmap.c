@@ -52,8 +52,9 @@ i386_detect_memory(void)
 	npages = totalmem / (PGSIZE / 1024);
 	npages_basemem = basemem / (PGSIZE / 1024);
 
+	//cprintf("Physical memory: %uK available, base = %uK, extended = %uK, npages_basemem = %u, npages = %u\n",
 	cprintf("Physical memory: %uK available, base = %uK, extended = %uK\n",
-		totalmem, basemem, totalmem - basemem);
+		totalmem, basemem, totalmem - basemem); //, npages_basemem, npages);
 }
 
 
@@ -122,7 +123,7 @@ boot_alloc(uint32_t n)
 		uint32_t pageAddress = ROUNDUP(n, PGSIZE);
 		uint32_t finalAddress = ((uint32_t) nextfree + pageAddress);
 		
-		if(finalAddress >= 0xffffffff)
+		if(finalAddress >= 0xffffffff) // 0xffffffff is 4GB Limit
 			panic("out of memory\n");
 		
 		//cprintf("fin: %x\n", (int) finalAddress); // used this to identify which portion of memory the pages get allocated in
@@ -184,6 +185,15 @@ mem_init(void)
 	
 	//cprintf("after: %p\n", pages); // Prints address of pages after allocation (returned from boot_alloc())
 
+	//cprintf("before: %p\n", pages); // Prints address of pages before allocation (expected: NULL)
+	//struct PageInfo array_pages[npages];  // FAILED
+	//pages = array_pages;					// FAILED
+	
+	pages = (struct PageInfo *) boot_alloc(npages * sizeof(struct PageInfo));
+	memset(pages, 0, npages * sizeof(struct PageInfo));
+	
+	//cprintf("after: %p\n", pages); // Prints address of pages after allocation (returned from boot_alloc())
+
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
 	// up the list of free physical pages. Once we've done so, all further
@@ -191,7 +201,18 @@ mem_init(void)
 	// particular, we can now map memory using boot_map_region
 	// or page_insert
 	page_init();
+
+	// cprintf("%p\n", &pages[1]);				// Address of page 1
+	// cprintf("%p\n", pages[2].pp_link);		// pp_link of page 2
+	// cprintf("%p\n", page_free_list);		
+	// cprintf("%p\n", *page_free_list);
+	// cprintf("%p\n", pages[npages].pp_link);
+	// cprintf("%p\n", &pages[npages]);
+	// cprintf("%p\n", pages[0].pp_link);
+	// cprintf("%p\n", &pages[0]);
+
 	panic("mem_init: This function is not finished\n");
+
 	check_page_free_list(1);
 	
 	check_page_alloc();
@@ -274,24 +295,58 @@ page_init(void)
 	//  1) Mark physical page 0 as in use.
 	//     This way we preserve the real-mode IDT and BIOS structures
 	//     in case we ever need them.  (Currently we don't, but...)
+	
+	pages[0].pp_ref = 1;
+	pages[0].pp_link = NULL;
+	//cprintf("1 ACHIEVED\n");
+	
 	//  2) The rest of base memory, [PGSIZE, npages_basemem * PGSIZE)
 	//     is free.
+	
+	size_t i;
+	for(i = 1; i < npages_basemem; i++){
+		pages[i].pp_ref = 0;
+		pages[i].pp_link = page_free_list;
+		page_free_list = &pages[i];
+	} // at the end of this loop, page_free_list = pages[npages_basemem]
+	//cprintf("2 ACHIEVED\n");
+	
 	//  3) Then comes the IO hole [IOPHYSMEM, EXTPHYSMEM), which must
 	//     never be allocated.
+	
+	size_t iophysmem = IOPHYSMEM / 4096;		// BUT WHAT ABOUT [npages_basemem, IOPHYSMEM)?
+	size_t extphysmem = EXTPHYSMEM / 4096;
+	for(i = iophysmem; i < extphysmem; i++){
+		pages[i].pp_ref = 1;
+		pages[i].pp_link = NULL;
+	}
+	//cprintf("3 ACHIEVED\n");
+	
 	//  4) Then extended memory [EXTPHYSMEM, ...).
 	//     Some of it is in use, some is free. Where is the kernel
 	//     in physical memory?  Which pages are already in use for
 	//     page tables and other data structures?
 	//
-	// Change the code to reflect this.
-	// NB: DO NOT actually touch the physical memory corresponding to
-	// free pages!
-	size_t i;
-	for (i = 0; i < npages; i++) {
+	
+	for(i = extphysmem; i < npages; i++){
 		pages[i].pp_ref = 0;
 		pages[i].pp_link = page_free_list;
 		page_free_list = &pages[i];
+		//cprintf("%d ", i);
 	}
+	//cprintf("4 ACHIEVED\n");
+	
+	// Change the code to reflect this.
+	// NB: DO NOT actually touch the physical memory corresponding to
+	// free pages!
+	
+	// ORIGINAL CODE (USED FOR (2) and (4))
+	// for (i = 0; i < npages; i++) {
+	// 	pages[i].pp_ref = 0;
+	// 	pages[i].pp_link = page_free_list;
+	// 	page_free_list = &pages[i];
+	// 	//cprintf("%d -> %p\n", i, page_free_list);
+	// }
 }
 
 //
