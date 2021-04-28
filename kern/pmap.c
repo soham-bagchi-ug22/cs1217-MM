@@ -304,8 +304,8 @@ page_init(void)
 	//  3) Then comes the IO hole [IOPHYSMEM, EXTPHYSMEM), which must
 	//     never be allocated.
 	
-	size_t iophysmem = IOPHYSMEM / 4096;		// BUT WHAT ABOUT [npages_basemem, IOPHYSMEM)?
-	size_t extphysmem = EXTPHYSMEM / 4096;
+	size_t iophysmem = IOPHYSMEM / PGSIZE;		// BUT WHAT ABOUT [npages_basemem, IOPHYSMEM)?
+	size_t extphysmem = EXTPHYSMEM / PGSIZE;
 	for(i = iophysmem; i < extphysmem; i++){
 		pages[i].pp_ref = 1;
 		pages[i].pp_link = NULL;
