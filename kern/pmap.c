@@ -330,6 +330,7 @@ page_init(void)
 	// NB: DO NOT actually touch the physical memory corresponding to
 	// free pages!
 	
+	// ORIGINAL CODE (USED FOR (2) and (4))
 	// for (i = 0; i < npages; i++) {
 	// 	pages[i].pp_ref = 0;
 	// 	pages[i].pp_link = page_free_list;
