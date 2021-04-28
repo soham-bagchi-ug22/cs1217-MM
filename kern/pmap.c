@@ -355,7 +355,23 @@ struct PageInfo *
 page_alloc(int alloc_flags)
 {
 	// Fill this function in
-	return 0;
+	struct PageInfo *page_pop = page_free_list;
+	// If there are no free pages, we need to return NULL, indicating an error
+	if (page_pop == NULL)
+	{
+		return NULL;
+	}
+
+	page_free_list = page_pop->pp_link;
+	page_pop->pp_ref = 1; // Mark in-use
+	page_pop->pp_link = NULL; 
+	
+	if (alloc_flags & ALLOC_ZERO)
+	{
+		struct PageInfo *ptr = page2kva(page_pop); // Convert physical page address to virtual
+		memset(ptr, 0, PGSIZE);
+	}
+	return page_pop;
 }
 
 //
@@ -366,6 +382,15 @@ void
 page_free(struct PageInfo *pp)
 {
 	// Fill this function in
+	assert(pp->pp_ref == 0);  
+	// If there are links to this page (i.e., pp_ref is non-zero), that means that the page cannot be freed
+	// We must then initate a panic	
+
+	assert(pp->pp_link == NULL); 
+	// Same thing as above, except we need to check if pp doesn't already point to a free page
+
+	pp->pp_link = page_free_list;
+	page_free_list = pp;
 	// Hint: You may want to panic if pp->pp_ref is nonzero or
 	// pp->pp_link is not NULL.
 }
