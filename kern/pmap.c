@@ -509,6 +509,30 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 int
 page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 {
+
+	// we have pgdir
+	// we have a pointer to a page
+	// we have a virtual address
+	// we have perms
+
+	pte_t *pt_entry = pgdir_walk(pgdir, va, 1);
+	if(pt_entry == NULL){
+		return -E_NO_MEM;
+	}
+	// we will be calling page_remove
+	// if pp_ref is already zero, page_remove will call page_decref will call page_free
+	// so we increment first
+	pp->pp_ref += 1;
+
+	if((*pt_entry & PTE_P) != 0){ // check permissions
+		// remove page if page already exists
+		page_remove(pgdir, va);
+	}
+
+	// if we get here, then we can convert input page into a physical address 
+	// and store that in the dereferenced index of the page table (via page table entry)
+	*pt_entry = page2pa(pp) | perm | PTE_P; // permissions from comments, but what does it mean?
+
 	// Fill this function in
 	return 0;
 }
