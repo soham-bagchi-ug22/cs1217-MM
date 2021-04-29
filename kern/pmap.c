@@ -211,6 +211,8 @@ mem_init(void)
 	// cprintf("%p\n", pages[0].pp_link);
 	// cprintf("%p\n", &pages[0]);
 
+	// cprintf("%x\n", PTE_ADDR(0xfedcba98)); // SO PTE_ADDR zeroes out the last three digits ~ 12 bits ~ 2^12 = 4096
+
 	panic("mem_init: This function is not finished\n");
 
 	check_page_free_list(1);
@@ -373,7 +375,7 @@ page_alloc(int alloc_flags)
 	}
 
 	page_free_list = page_pop->pp_link;
-	page_pop->pp_ref = 1; // Mark in-use
+	// page_pop->pp_ref = 1; // Commented this out since page alloc only allocates and doesn't mark as in-use
 	page_pop->pp_link = NULL; 
 	
 	if (alloc_flags & ALLOC_ZERO)
@@ -443,7 +445,55 @@ pte_t *
 pgdir_walk(pde_t *pgdir, const void *va, int create)
 {
 	// Fill this function in
-	return NULL;
+
+	// Linear Address VA exists in Page Directory pgdir
+	// We will access this by doing pgdir[va] but we first need to translate from virtual to physical
+	
+	// We will use PDX(la) for this
+	uintptr_t pd_index = PDX(va);
+	pde_t pd_entry = pgdir[pd_index];
+
+	// PART 1: Page Table Entry does not exist 
+
+	// If pd_entry == NULL, that means that the corresponding page table doesn't exist
+	if (pd_entry == NULL) 
+	{
+		if (create == 0) // create 0 implies we don't want to initialize a new page dir entry
+		{
+			return NULL;
+		}
+		else 
+		{
+			// Now that create is not 0, we can use page_alloc() to create a new page
+			struct PageInfo *newpg;
+			newpg = page_alloc(ALLOC_ZERO);
+			// Page alloc returns NULL if there are no more free pages
+			if (newpg == NULL)
+			{
+				return NULL;
+			}
+			// Else, since there is one more reference to this page, we will update pp_ref of the newly allocated page
+			newpg->pp_ref += 1;
+
+			// permissions?
+
+
+			// Converting the allocated page's address from virtual to physical
+			// and storing it in the page directory 
+			pd_entry = page2pa(newpg);
+			pgdir[pd_index] = pd_entry;
+	
+		}
+
+	}
+
+	// PART 2: Page Table Entry exists
+	physaddr_t pt_physadd = PTE_ADDR(pd_entry); // Now we have the physical address of the page table
+	pde_t *pt_virtadd = KADDR(pt_physadd); // Now we have a pointer to the virtual address of page table
+	uintptr_t pt_index = PTX(va); // Here, we get an index into the page table 
+	pte_t *pt_entry = pt_virtadd[pt_index]; // Finally, we have a pointer to the page table entry that we can now return
+
+	return pt_entry;
 }
 
 //
