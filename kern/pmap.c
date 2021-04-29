@@ -543,10 +543,12 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 		*pte_store = pt_entry;
 	}
 
+	// using PTE_ADDR to get the physical address of the page
 	physaddr_t pt_physadd = PTE_ADDR(pt_entry);
-	struct PageInfo* page = pa2page(pt_physadd);
+	// get the page using the physical address
+	struct PageInfo *page = pa2page(pt_physadd);
+	// return pointer to page
 	return page; 
-
 }
 
 //
