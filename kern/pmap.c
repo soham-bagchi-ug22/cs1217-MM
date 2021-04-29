@@ -150,7 +150,6 @@ mem_init(void)
 
 	// Find out how much memory the machine has (npages & npages_basemem).
 	i386_detect_memory();
-
 	// Remove this line when you're ready to test this function.
 	//panic("mem_init: This function is not finished\n");
 
@@ -288,7 +287,7 @@ page_init(void)
 	
 	pages[0].pp_ref = 1;
 	pages[0].pp_link = NULL;
-	//cprintf("1 ACHIEVED\n");
+	//																								cprintf("1 ACHIEVED\n");
 	
 	//  2) The rest of base memory, [PGSIZE, npages_basemem * PGSIZE)
 	//     is free.
@@ -299,7 +298,7 @@ page_init(void)
 		pages[i].pp_link = page_free_list;
 		page_free_list = &pages[i];
 	} // at the end of this loop, page_free_list = pages[npages_basemem]
-	//cprintf("2 ACHIEVED\n");
+	//																								cprintf("2 ACHIEVED\n");
 	
 	//  3) Then comes the IO hole [IOPHYSMEM, EXTPHYSMEM), which must
 	//     never be allocated.
@@ -310,7 +309,7 @@ page_init(void)
 		pages[i].pp_ref = 1;
 		pages[i].pp_link = NULL;
 	}
-	//cprintf("3 ACHIEVED\n");
+	//																								cprintf("3 ACHIEVED\n");
 	
 	//  4) Then extended memory [EXTPHYSMEM, ...).
 	//     Some of it is in use, some is free. Where is the kernel
@@ -322,9 +321,9 @@ page_init(void)
 		pages[i].pp_ref = 0;
 		pages[i].pp_link = page_free_list;
 		page_free_list = &pages[i];
-		//cprintf("%d ", i);
+		//																							cprintf("%d ", i);
 	}
-	//cprintf("4 ACHIEVED\n");
+	//																								cprintf("4 ACHIEVED\n");
 	
 	// Change the code to reflect this.
 	// NB: DO NOT actually touch the physical memory corresponding to
