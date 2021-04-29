@@ -535,8 +535,9 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 
 	pte_t * pt_entry = pgdir_walk(pgdir, (void *) va, 0);
 	
-	if(!pt_entry)
+	if(!pt_entry){
 		return NULL;
+	}
 
 	if(pte_store != 0){
 		// we're dereferencing a double-pointer, and storing the pt_entry for future usage
