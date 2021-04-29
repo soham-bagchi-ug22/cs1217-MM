@@ -528,7 +528,25 @@ struct PageInfo *
 page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 {
 	// Fill this function in
-	return NULL;
+
+	// we have pgdir
+	// we have virtual address va
+	// we have pte_store, which is a double pointer, 
+
+	pte_t * pt_entry = pgdir_walk(pgdir, (void *) va, 0);
+	
+	if(!pt_entry)
+		return NULL;
+
+	if(pte_store != 0){
+		// we're dereferencing a double-pointer, and storing the pt_entry for future usage
+		*pte_store = pt_entry;
+	}
+
+	physaddr_t pt_physadd = PTE_ADDR(pt_entry);
+	struct PageInfo* page = pa2page(pt_physadd);
+	return page; 
+
 }
 
 //
