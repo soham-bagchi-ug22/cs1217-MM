@@ -449,6 +449,36 @@ static void
 boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
 {
 	// Fill this function in
+
+	// We're getting a page directory 
+	// We're getting a virtual address
+	// We're getting a size at the granularity of 4096 bytes
+	// We're getting a physical address
+	// We're getting permissions
+	
+	// First we need to assert the sizes and addresses
+
+	assert(va % PGSIZE == 0);
+	assert(pa % PGSIZE == 0);
+	assert(size % PGSIZE == 0);
+
+	for(int i = 0; i < size/PGSIZE; i++){
+		// okay what does pgdir_walk do? It returns a pointer to the page table entry 
+		// what do we need to give pgdir_walk? 
+		// 1) pgdir_address = pgdir
+		// 2) va = va
+		// 3) create? probably yeah 
+
+		//pte_t * pt_entry = pgdir_walk(pgdir, va, 1); // this was only accessing the first page
+		pte_t * pt_entry = pgdir_walk(pgdir, (void *) va + i * PGSIZE, 1);
+				
+		// so now we have the page table entry, in the virtual space
+		// we copy over everything from the physical space to the virtual space
+		// but how?? come back to this later...
+
+		// we dereference the page table entry, so we get the address of the page
+		*pt_entry = (pa + i * PGSIZE); // figure out permissions with Bhavesh
+	}
 }
 
 //
