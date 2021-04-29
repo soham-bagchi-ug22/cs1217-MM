@@ -570,6 +570,34 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 void
 page_remove(pde_t *pgdir, void *va)
 {
+	// we have pgdir
+	// we have va
+	// we need the page
+	// we will use page_lookup with the pte_store thing
+
+	// initialize a store pointer for page table entry
+	pte_t *pt_entry_store;
+
+	// hitting up page_lookup with pgdir and va
+	struct PageInfo * page = page_lookup(pgdir, va, &pt_entry_store);
+
+	// page->pp_ref -= 1;
+
+	// if(page->pp_ref == 0){
+	// 	page_free(page);
+	// }
+
+	// Nikhil discovered that page_decref does all of this automatically, making Soham look stupid
+	page_decref(page);
+	
+	// if page table entry exists, we set it to zero
+	if(pt_entry_store != 0){
+		*pt_entry_store = 0;
+	}
+
+	// calling tlb_invalidate to abstract away the work for us
+	// will we ever find out what it does? no. 
+	tlb_invalidate(pgdir, va);
 	// Fill this function in
 }
 
