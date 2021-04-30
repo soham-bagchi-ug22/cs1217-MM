@@ -531,14 +531,21 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 		// 3) create? probably yeah 
 
 		//pte_t * pt_entry = pgdir_walk(pgdir, va, 1); // this was only accessing the first page
-		pte_t * pt_entry = pgdir_walk(pgdir, (void *) va + i * PGSIZE, 1);
+		pte_t * pt_entry = pgdir_walk(pgdir, (void *) va + (i * PGSIZE), 1);
 				
 		// so now we have the page table entry, in the virtual space
 		// we copy over everything from the physical space to the virtual space
 		// but how?? come back to this later...
+		if (pt_entry == NULL)
+		{
+			panic("Failed");
+		}
 
 		// we dereference the page table entry, so we get the address of the page
-		*pt_entry = (pa + i * PGSIZE); // figure out permissions with Bhavesh
+		*pt_entry = (pa + i * PGSIZE); 
+		// Now we need to set the permission that has been inputted. We do bitwise OR with PTE_P to set the present perm bit
+		*pt_entry = (pa + i * PGSIZE)| perm | PTE_P;
+		
 	}
 }
 
