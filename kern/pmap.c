@@ -150,7 +150,6 @@ mem_init(void)
 
 	// Find out how much memory the machine has (npages & npages_basemem).
 	i386_detect_memory();
-
 	// Remove this line when you're ready to test this function.
 	//panic("mem_init: This function is not finished\n");
 
@@ -300,7 +299,7 @@ page_init(void)
 	
 	pages[0].pp_ref = 1;
 	pages[0].pp_link = NULL;
-	//cprintf("1 ACHIEVED\n");
+	//																								cprintf("1 ACHIEVED\n");
 	
 	//  2) The rest of base memory, [PGSIZE, npages_basemem * PGSIZE)
 	//     is free.
@@ -311,18 +310,18 @@ page_init(void)
 		pages[i].pp_link = page_free_list;
 		page_free_list = &pages[i];
 	} // at the end of this loop, page_free_list = pages[npages_basemem]
-	//cprintf("2 ACHIEVED\n");
+	//																								cprintf("2 ACHIEVED\n");
 	
 	//  3) Then comes the IO hole [IOPHYSMEM, EXTPHYSMEM), which must
 	//     never be allocated.
 	
 	size_t iophysmem = IOPHYSMEM / PGSIZE;		// BUT WHAT ABOUT [npages_basemem, IOPHYSMEM)?
-	size_t extphysmem = EXTPHYSMEM / PGSIZE;    // Replaced 4096 with PGSIZE for modularity
+	size_t extphysmem = EXTPHYSMEM / PGSIZE;
 	for(i = iophysmem; i < extphysmem; i++){
 		pages[i].pp_ref = 1;
 		pages[i].pp_link = NULL;
 	}
-	//cprintf("3 ACHIEVED\n");
+	//																								cprintf("3 ACHIEVED\n");
 	
 	//  4) Then extended memory [EXTPHYSMEM, ...).
 	//     Some of it is in use, some is free. Where is the kernel
@@ -334,9 +333,9 @@ page_init(void)
 		pages[i].pp_ref = 0;
 		pages[i].pp_link = page_free_list;
 		page_free_list = &pages[i];
-		//cprintf("%d ", i);
+		//																							cprintf("%d ", i);
 	}
-	//cprintf("4 ACHIEVED\n");
+	//																								cprintf("4 ACHIEVED\n");
 	
 	// Change the code to reflect this.
 	// NB: DO NOT actually touch the physical memory corresponding to
@@ -375,7 +374,7 @@ page_alloc(int alloc_flags)
 	}
 
 	page_free_list = page_pop->pp_link;
-	// page_pop->pp_ref = 1; // Commented this out since page alloc only allocates and doesn't mark as in-use
+	page_pop->pp_ref = 1; // Mark in-use
 	page_pop->pp_link = NULL; 
 	
 	if (alloc_flags & ALLOC_ZERO)
@@ -455,8 +454,8 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 
 	// PART 1: Page Table Entry does not exist 
 
-	// If pd_entry == NULL, that means that the corresponding page table doesn't exist
-	if (pd_entry == NULL) 
+	// If pd_entry is NULL, that means that the corresponding page table doesn't exist
+	if (pd_entry == 0) 
 	{
 		if (create == 0) // create 0 implies we don't want to initialize a new page dir entry
 		{
@@ -491,7 +490,7 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 	physaddr_t pt_physadd = PTE_ADDR(pd_entry); // Now we have the physical address of the page table
 	pde_t *pt_virtadd = KADDR(pt_physadd); // Now we have a pointer to the virtual address of page table
 	uintptr_t pt_index = PTX(va); // Here, we get an index into the page table 
-	pte_t *pt_entry = pt_virtadd[pt_index]; // Finally, we have a pointer to the page table entry that we can now return
+	pte_t *pt_entry = (pte_t *)pt_virtadd[pt_index]; // Finally, we have a pointer to the page table entry that we can now return
 
 	return pt_entry;
 }
@@ -511,6 +510,36 @@ static void
 boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
 {
 	// Fill this function in
+
+	// We're getting a page directory 
+	// We're getting a virtual address
+	// We're getting a size at the granularity of 4096 bytes
+	// We're getting a physical address
+	// We're getting permissions
+	
+	// First we need to assert the sizes and addresses
+
+	assert(va % PGSIZE == 0);
+	assert(pa % PGSIZE == 0);
+	assert(size % PGSIZE == 0);
+
+	for(int i = 0; i < size/PGSIZE; i++){
+		// okay what does pgdir_walk do? It returns a pointer to the page table entry 
+		// what do we need to give pgdir_walk? 
+		// 1) pgdir_address = pgdir
+		// 2) va = va
+		// 3) create? probably yeah 
+
+		//pte_t * pt_entry = pgdir_walk(pgdir, va, 1); // this was only accessing the first page
+		pte_t * pt_entry = pgdir_walk(pgdir, (void *) va + i * PGSIZE, 1);
+				
+		// so now we have the page table entry, in the virtual space
+		// we copy over everything from the physical space to the virtual space
+		// but how?? come back to this later...
+
+		// we dereference the page table entry, so we get the address of the page
+		*pt_entry = (pa + i * PGSIZE); // figure out permissions with Bhavesh
+	}
 }
 
 //
@@ -541,6 +570,30 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 int
 page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 {
+
+	// we have pgdir
+	// we have a pointer to a page
+	// we have a virtual address
+	// we have perms
+
+	pte_t *pt_entry = pgdir_walk(pgdir, va, 1);
+	if(pt_entry == NULL){
+		return -E_NO_MEM;
+	}
+	// we will be calling page_remove
+	// if pp_ref is already zero, page_remove will call page_decref will call page_free
+	// so we increment first
+	pp->pp_ref += 1;
+
+	if((*pt_entry & PTE_P) != 0){ // check permissions
+		// remove page if page already exists
+		page_remove(pgdir, va);
+	}
+
+	// if we get here, then we can convert input page into a physical address 
+	// and store that in the dereferenced index of the page table (via page table entry)
+	*pt_entry = page2pa(pp) | perm | PTE_P; // permissions from comments, but what does it mean?
+
 	// Fill this function in
 	return 0;
 }
@@ -560,7 +613,28 @@ struct PageInfo *
 page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 {
 	// Fill this function in
-	return NULL;
+
+	// we have pgdir
+	// we have virtual address va
+	// we have pte_store, which is a double pointer, 
+
+	pte_t * pt_entry = pgdir_walk(pgdir, (void *) va, 0);
+	
+	if(!pt_entry){
+		return NULL;
+	}
+
+	if(pte_store != 0){
+		// we're dereferencing a double-pointer, and storing the pt_entry for future usage
+		*pte_store = pt_entry;
+	}
+
+	// using PTE_ADDR to get the physical address of the page
+	physaddr_t pt_physadd = PTE_ADDR(pt_entry);
+	// get the page using the physical address
+	struct PageInfo *page = pa2page(pt_physadd);
+	// return pointer to page
+	return page; 
 }
 
 //
@@ -581,6 +655,34 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 void
 page_remove(pde_t *pgdir, void *va)
 {
+	// we have pgdir
+	// we have va
+	// we need the page
+	// we will use page_lookup with the pte_store thing
+
+	// initialize a store pointer for page table entry
+	pte_t *pt_entry_store;
+
+	// hitting up page_lookup with pgdir and va
+	struct PageInfo * page = page_lookup(pgdir, va, &pt_entry_store);
+
+	// page->pp_ref -= 1;
+
+	// if(page->pp_ref == 0){
+	// 	page_free(page);
+	// }
+
+	// Nikhil discovered that page_decref does all of this automatically, making Soham look stupid
+	page_decref(page);
+	
+	// if page table entry exists, we set it to zero
+	if(pt_entry_store != 0){
+		*pt_entry_store = 0;
+	}
+
+	// calling tlb_invalidate to abstract away the work for us
+	// will we ever find out what it does? no. 
+	tlb_invalidate(pgdir, va);
 	// Fill this function in
 }
 
