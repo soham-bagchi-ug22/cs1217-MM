@@ -18,6 +18,16 @@ pde_t *kern_pgdir;		// Kernel's initial page directory
 struct PageInfo *pages;		// Physical page state array
 static struct PageInfo *page_free_list;	// Free list of physical pages
 
+// --------------------------------------------------------------
+// Soham's Constants for Superpages
+// --------------------------------------------------------------
+
+size_t hnpages;					// Amount of physical memory allocated to superpages (in pages)
+static size_t hnpages_basemem;	// Amount of base memory allocated to superpages (npages_basemem will be readjusted)
+
+struct PageInfo *hpages;					// Physical page state array for superpages
+static struct PageInfo *hpage_free_list;	// Free list of physical superpages
+
 
 // --------------------------------------------------------------
 // Detect machine's physical memory setup.
@@ -49,11 +59,14 @@ i386_detect_memory(void)
 	else
 		totalmem = basemem;
 
-	npages = totalmem / (PGSIZE / 1024);
-	// cprintf("npages = %p | %d\n", npages, npages);
-	// npages = (totalmem / (PGSIZE / 1024)) - 1024 - 1; // FOR 4MB TESTING - SB
-	// cprintf("npages = %p | %d\n", npages, npages);
+	npages = (totalmem / (PGSIZE / 1024)) - 8192;
 	npages_basemem = basemem / (PGSIZE / 1024);
+
+	hnpages = (totalmem / (PGSIZE / 1024)) - npages;
+
+	cprintf("\nnumber of pages: %d\n", npages);
+	cprintf("number of superpages (in pages): %d\n", hnpages);
+	cprintf("number of superpages: %d\n\n", (hnpages)/1024);
 
 	//cprintf("Physical memory: %uK available, base = %uK, extended = %uK, npages_basemem = %u, npages = %u\n",
 	cprintf("Physical memory: %uK available, base = %uK, extended = %uK\n",
@@ -180,6 +193,11 @@ mem_init(void)
 	
 	pages = (struct PageInfo *) boot_alloc(npages * sizeof(struct PageInfo));
 	memset(pages, 0, npages * sizeof(struct PageInfo));
+
+	hpages = (struct PageInfo *) boot_alloc(hnpages * sizeof(struct PageInfo));
+	memset(hpages, 0, hnpages * sizeof(struct PageInfo));
+
+	cprintf("pages: %p, hpages: %p\n", pages, hpages);
 	
 	//cprintf("after: %p\n", pages); // Prints address of pages after allocation (returned from boot_alloc())
 
@@ -353,12 +371,23 @@ page_init(void)
 	// IF THE PAGE TO BE ALLOCATED IS BELOW THE FIRST FREE PAGE (boot_alloc) DON'T TOUCH
 	// If it is above, go for it
 
+	
 	uint32_t firstFreeAlloc = (uint32_t) boot_alloc(0);
+	
 	for(i = ((uint32_t)boot_alloc(0) - KERNBASE)/PGSIZE; i < npages; i++){
 		if(KERNBASE + i * PGSIZE > firstFreeAlloc){
 			pages[i].pp_ref = 0;
 			pages[i].pp_link = page_free_list;
 			page_free_list = &pages[i];
+		}
+	}
+
+	// superpages reservation
+	for(i = 0; i < hnpages; i++){
+		if(KERNBASE + npages*PGSIZE + i*HPGSIZE > firstFreeAlloc){
+			hpages[i].pp_ref = 0;
+			hpages[i].pp_link = hpage_free_list;
+			hpage_free_list = &hpages[i];
 		}
 	}
 
@@ -410,6 +439,25 @@ page_alloc(int alloc_flags)
 	return page_pop;
 }
 
+// page_alloc for superpages
+struct PageInfo *
+hpage_alloc(int alloc_flags){
+	struct PageInfo *hpage_pop = hpage_free_list;
+
+	if(hpage_pop == NULL){
+		return NULL;
+	}
+
+	hpage_free_list = hpage_pop->pp_link;
+	hpage_pop->pp_link = NULL;
+
+	if(alloc_flags & ALLOC_ZERO){
+		void *ptr = hpage2kva(hpage_pop);
+		memset(ptr, 0, HPGSIZE);
+	}
+	return hpage_pop;
+}
+
 //
 // Return a page to the free list.
 // (This function should only be called when pp->pp_ref reaches 0.)
@@ -431,6 +479,24 @@ page_free(struct PageInfo *pp)
 	// pp->pp_link is not NULL.
 }
 
+//Superpage version of page_free
+void
+hpage_free(struct PageInfo *pp)
+{
+	// Fill this function in
+	assert(pp->pp_ref == 0);  
+	// If there are links to this page (i.e., pp_ref is non-zero), that means that the page cannot be freed
+	// We must then initate a panic	
+
+	assert(pp->pp_link == NULL); 
+	// Same thing as above, except we need to check if pp doesn't already point to a free page
+
+	pp->pp_link = hpage_free_list;
+	hpage_free_list = pp;
+	// Hint: You may want to panic if pp->pp_ref is nonzero or
+	// pp->pp_link is not NULL.
+}
+
 //
 // Decrement the reference count on a page,
 // freeing it if there are no more refs.
@@ -440,6 +506,14 @@ page_decref(struct PageInfo* pp)
 {
 	if (--pp->pp_ref == 0)
 		page_free(pp);
+}
+
+//Superpage page_decref Soham
+void
+hpage_decref(struct PageInfo* pp)
+{
+	if (--pp->pp_ref == 0)
+		hpage_free(pp);
 }
 
 // Given 'pgdir', a pointer to a page directory, pgdir_walk returns
@@ -507,7 +581,7 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 		// Converting the allocated page's address from virtual to physical
 		// and storing it in the page directory 
 
-		pgdir[PDX(va)] = (uintptr_t) page2pa(newpg) | PTE_P | PTE_U | PTE_W;
+		pgdir[pd_index] = (uintptr_t) page2pa(newpg) | PTE_P | PTE_U | PTE_W;
 
 		pt_entry = (pte_t *) KADDR((uintptr_t) page2pa(newpg));
 	}
@@ -562,44 +636,19 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 			// we use the PDX macro to get the page directory entry
 			pde_t * pd_entry = pgdir + PDX(va + i * HPGSIZE);
 
-			if(pd_entry != NULL){
-				*pd_entry = (pa + i * HPGSIZE) | perm | PTE_P | PTE_PS;
-			}
-
-
-			// in the trivial 4KB case, pgdir_walk would have created a page
+			// in the trivial 4KB case, pgdir_walk would have created a page table
 			// and returned NULL only if it didn't have any pages left
 			// in the 4MB case, if pt_entry == NULL, we have to allocate a 4MB page in memory.
 			// I will use boot_alloc for that, but I am doubtful. 
-			else{
-				//TESTING SPACE FOR E6
-				
-				// // from page_alloc
-				// struct PageInfo * pagebig = page_free_list;
-				
-				// // If there are no free pages, we need to return NULL, indicating an error
-				// // using assert instead
-				// assert(pagebig != NULL);
-				// cprintf("%p\n", pagebig);
-				// page_free_list = pagebig->pp_link;
-				// //page_pop->pp_ref = 1; // Mark in-use
-				// pagebig->pp_link = NULL; 
-				
-				// cprintf("%p\n", page_free_list);
-				// //struct PageInfo *ptr = page2kva(pagebig); // Convert physical page address to virtual
-				
-				cprintf("%p\n", boot_alloc(0));
-				struct PageInfo *ptr = boot_alloc(0);
-				cprintf("boot_alloc'd: %p\n", ptr);
+			// a-HA! I will use hpage_alloc for that, fuck boot_alloc
 
-				//memset(ptr, 0, PGSIZE); // works, but we knew that
-				memset(ptr, 0, HPGSIZE); // does not work :(
-				
-				cprintf("big page: %p\n", ptr);
-				cprintf("%p\n", pages);
+			// sorry, ignore all of the above comments
+			// pgdir_walk would have created a secondary page table (and a page for that)
+			// if it was missing
+			// we don't need secondary page tables, we can directly create the entry. 
 
-				panic("if we get here, e6 works\n");
-			}
+			*pd_entry = (pa + i * HPGSIZE) | perm | PTE_P ;
+		
 		}
 	}
 
@@ -655,6 +704,11 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 	// we have a virtual address
 	// we have perms
 
+	// if PTE_PS flag is enabled, we use the Superpage Insert instead
+	if(perm & PTE_PS){
+		return hpage_insert(pgdir, pp, va, perm);
+	}
+
 	// get page table entry from pgdir walk	
 	pte_t *pt_entry = pgdir_walk(pgdir, va, 1);
 	
@@ -686,6 +740,47 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 	// update page table entry
 	*pt_entry = page2pa(pp) | perm | PTE_P; // permissions from comments, but what does it mean?
 
+	// flush the tlb like the function requires
+	tlb_invalidate(pgdir, va);
+
+	// Fill this function in
+	return 0;
+}
+
+int
+hpage_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
+{
+	// we have pgdir
+	// we have a pointer to a page
+	// we have a virtual address
+	// we have perms
+
+	// if we get here, then we can convert input page into a physical address 
+	// and store that in the dereferenced index of the page table (via page table entry)
+
+	// if page is unused (as it should be), change the hpage_free_list
+	if(pp->pp_ref == 0){
+		hpage_free_list = pp->pp_link;
+		pp->pp_link = NULL;
+	}
+	
+
+	// we will be calling page_remove
+	// if pp_ref is already zero, page_remove will call page_decref will call page_free
+	// so we increment first
+	
+	// increment page pointer refereance
+	pp->pp_ref++;
+
+	pde_t *pd_entry = &pgdir[PDX(va)];
+
+	// if there already exists a superpage, remove it
+	if(*pd_entry)
+		hpage_remove(pgdir, va);
+
+	// update page table entry
+	*pd_entry = (uintptr_t) hpage2pa(pp) | perm | PTE_P;
+	
 	// flush the tlb like the function requires
 	tlb_invalidate(pgdir, va);
 
@@ -735,6 +830,36 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 	
 }
 
+struct PageInfo *
+hpage_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
+{
+	// Fill this function in
+
+	// we have pgdir
+	// we have virtual address va
+	// we have pte_store, which is a double pointer, 
+
+	pte_t * pd_entry = &pgdir[PDX(va)];
+	
+	//if(!pt_entry || (*pt_entry)){
+	if(!pd_entry){
+		return NULL;
+	}
+
+	if(pte_store){
+		// we're dereferencing a double-pointer, and storing the pt_entry for future usage
+		*pte_store = pd_entry;
+	}
+
+	// using PTE_ADDR to get the physical address of the page
+	physaddr_t pt_physadd = HPTE_ADDR(*pd_entry);
+	
+	// get the page using the physical address
+	
+	// return pointer to page
+	return pa2hpage(pt_physadd);
+}
+
 //
 // Unmaps the physical page at virtual address 'va'.
 // If there is no physical page at that address, silently does nothing.
@@ -781,6 +906,42 @@ page_remove(pde_t *pgdir, void *va)
 		//if(pt_entry_store != 0){
 		*pt_entry_store = 0;
 		//}
+
+		// calling tlb_invalidate to abstract away the work for us
+		// will we ever find out what it does? no. 
+		tlb_invalidate(pgdir, va);
+		// Fill this function in
+	}
+}
+
+//Soham's Superpages
+void
+hpage_remove(pde_t *pgdir, void *va)
+{
+	// we have pgdir
+	// we have va
+	// we need the page
+	// we will use page_lookup with the pte_store thing
+
+	// initialize a store pointer for page table entry
+	pde_t *pt_entry_store;
+
+	// hitting up page_lookup with pgdir and va
+	struct PageInfo * page = hpage_lookup(pgdir, va, &pt_entry_store);
+
+	// page->pp_ref -= 1;
+
+	// if(page->pp_ref == 0){
+	// 	page_free(page);
+	// }
+	// if(!page)
+	// 	return;
+	
+	if(page){
+		
+		hpage_decref(page);
+
+		*pt_entry_store = 0;
 
 		// calling tlb_invalidate to abstract away the work for us
 		// will we ever find out what it does? no. 

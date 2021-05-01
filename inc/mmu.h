@@ -60,8 +60,9 @@
 // 4KB pages, we only need to create a Macro for accessing the Offset
 
 #define HPGSIZE			4096*1024 // 4096 = 4KB, 4KB * 1024 = 4MB
-#define HPGOFF(la)		(((uintptr_t) (la)) & 0x003FFFFF)
-#define HPTE_ADDR(hpte) ((physaddr_t) (hpte) & 0xFFC00000)
+#define HPGOFF(la)		(((uintptr_t) (la)) & 0x3FFFFF)
+#define HPTE_ADDR(hpte) ((physaddr_t) (hpte) & ~0x3FFFFF)
+#define HPGNUM(la)		((((uintptr_t) (la)) >> PDXSHIFT) - npages)
 
 #define PTSIZE		(PGSIZE*NPTENTRIES) // bytes mapped by a page directory entry
 #define PTSHIFT		22		// log2(PTSIZE)
