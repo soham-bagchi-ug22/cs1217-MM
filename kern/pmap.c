@@ -120,7 +120,9 @@ boot_alloc(uint32_t n)
 	nextfree = ROUNDUP(returnAddress + n, PGSIZE);
 
 	// our limit is set to the capacity of a page tables worth of pages.
-	if((uintptr_t) nextfree >= KERNBASE + NPTENTRIES * PGSIZE){
+	// if((uintptr_t) nextfree >= KERNBASE + NPTENTRIES * PGSIZE){
+	if((uintptr_t) nextfree >= KERNBASE + 0x0e000000)
+	{
 		panic("out of memory\n"); 
 	}
 	//cprintf("fin: %x\n", (int) finalAddress); // used this to identify which portion of memory the pages get allocated in
@@ -282,6 +284,34 @@ mem_init(void)
 	// Some more checks, only possible after kern_pgdir is installed.
 	check_page_installed_pgdir();
 	//panic("mem_init: This function is not finished\n");
+
+	// Exercise 5.2
+	//cprintf("Linear Address at 1023: %p\n", ((uintptr_t) PGADDR(PDX(kern_pgdir), 1023, 0)));
+	
+	cprintf("Page table index at Linear Address 0xffffffff: %d\n", PDX(0xffffffff));        // Top most hex address
+	
+	cprintf("Page table index at Linear Address 0xffc00000: %d\n", PDX(0xffc00000));        // Last hex address in Page Dir Entry #1023
+	cprintf("Page table index at Linear Address 0xffbfffff: %d\n", PDX(0xffbfffff));        // First hex address in Page Dir Entry #1022
+	cprintf("Page table index at Linear Address 0xff800000: %d\n", PDX(0xff800000));        // Last hex address in Page Dir Entry #1022
+ 	cprintf("Page table index at Linear Address 0xff7fffff: %d\n", PDX(0xff7fffff));        // First hex address in Page Dir Entry #1021
+
+
+	cprintf("Page table index at Linear Address 0xf0000000/KERNBASE: %d\n", PDX(KERNBASE)); // Kernbase hex address
+
+	cprintf("Page table index at Linear Address kern_pgdir: %d\n", PDX(kern_pgdir));        // kern_pgdir hex address
+
+	cprintf("Page table index at Linear Address MMIOLIM: %d\n", PDX(MMIOLIM));                  
+	cprintf("Page table index at Linear Address MMIOBASE: %d\n", PDX(MMIOBASE));                 
+	cprintf("Page table index at Linear Address UVPT: %d\n", PDX(UVPT));                  
+	cprintf("Page table index at Linear Address UPAGES: %d\n", PDX(UPAGES));                 
+	cprintf("Page table index at Linear Address KSTACKTOP: %d\n", PDX(KSTACKTOP));   
+	cprintf("Page table index at Linear Address IOPHYSMEM: %d\n", PDX(IOPHYSMEM));                  
+	cprintf("Page table index at Linear Address EXTPHYSMEM: %d\n", PDX(EXTPHYSMEM));
+	              
+	              
+                
+	
+	
 }
 
 // --------------------------------------------------------------
