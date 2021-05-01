@@ -532,7 +532,7 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 		// Converting the allocated page's address from virtual to physical
 		// and storing it in the page directory 
 
-		pgdir[PDX(va)] = (uintptr_t) page2pa(newpg) | PTE_P | PTE_U | PTE_W;
+		pgdir[pd_index] = (uintptr_t) page2pa(newpg) | PTE_P | PTE_U | PTE_W;
 
 		pt_entry = (pte_t *) KADDR((uintptr_t) page2pa(newpg));
 	}

@@ -6,10 +6,14 @@
 #include <inc/memlayout.h>
 #include <inc/assert.h>
 #include <inc/x86.h>
+#include <inc/mmu.h>
 
 #include <kern/console.h>
 #include <kern/monitor.h>
 #include <kern/kdebug.h>
+#include <kern/pmap.h>
+
+
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
@@ -24,6 +28,9 @@ struct Command {
 static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
+	{ "showpagemappings", "Display page mappings", mon_showpagemappings }
+	// { "dumpmem", "Display memory dump", mon_dumpmem} ,
+	// { "pageperms", "Display/change page permissions", mon_pageperms }
 };
 
 /***** Implementations of basic kernel monitor commands *****/
@@ -61,6 +68,63 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 	return 0;
 }
 
+int 
+mon_showpagemappings(int argc, char **argv, struct Trapframe *tf)
+{
+	// assume hex addresses are clean (no invalid input, no 0x...)
+	uintptr_t va1, va2;
+
+	long virtualadd1;
+	char *dummyptr1;
+
+	virtualadd1 = strtol(argv[1], &dummyptr1, 16);
+
+	long virtualadd2;
+	char *dummyptr2;
+
+	virtualadd2 = strtol(argv[2], &dummyptr2, 16);
+
+	va1 = (uintptr_t) virtualadd1;
+	va2 = (uintptr_t) virtualadd2;
+
+	cprintf("You inputted: %p\n", va1);
+	cprintf("You inputted: %p\n", va2);
+
+	cprintf("You inputted: %p\n", virtualadd1);
+	cprintf("You inputted: %p\n", virtualadd2);
+
+	// Declare a page table entry
+	pte_t *pgtentry;
+	uintptr_t i;
+	for (i = va1; i <= va2; i += PGSIZE)
+	{
+		pgtentry = pgdir_walk(kern_pgdir, (const void *)i, 0);
+		if (pgtentry != 0)
+		{
+			cprintf("Virtual address %p => maps to => Physical Address %p\n", PTE_ADDR(pgtentry));
+		}
+		else
+		{
+			cprintf("This address is not mapped\n");
+		}	
+
+	}
+
+	return 0;
+}
+
+// int
+// mon_dumpmem()
+// {
+	
+
+// }
+
+// int 
+// mon_pageperms()
+// {
+
+// }
 
 
 /***** Kernel monitor command interpreter *****/
