@@ -50,6 +50,9 @@ i386_detect_memory(void)
 		totalmem = basemem;
 
 	npages = totalmem / (PGSIZE / 1024);
+	// cprintf("npages = %p | %d\n", npages, npages);
+	// npages = (totalmem / (PGSIZE / 1024)) - 1024 - 1; // FOR 4MB TESTING - SB
+	// cprintf("npages = %p | %d\n", npages, npages);
 	npages_basemem = basemem / (PGSIZE / 1024);
 
 	//cprintf("Physical memory: %uK available, base = %uK, extended = %uK, npages_basemem = %u, npages = %u\n",
@@ -120,7 +123,9 @@ boot_alloc(uint32_t n)
 	nextfree = ROUNDUP(returnAddress + n, PGSIZE);
 
 	// our limit is set to the capacity of a page tables worth of pages.
-	if((uintptr_t) nextfree >= KERNBASE + NPTENTRIES * PGSIZE){
+	//if((uintptr_t) nextfree >= KERNBASE + NPTENTRIES * PGSIZE){
+	//cprintf("%p\n", nextfree);
+	if((uintptr_t) nextfree >= KERNBASE + 0x0e000000){
 		panic("out of memory\n"); 
 	}
 	//cprintf("fin: %x\n", (int) finalAddress); // used this to identify which portion of memory the pages get allocated in
@@ -151,7 +156,7 @@ mem_init(void)
 	// create initial page directory.
 	kern_pgdir = (pde_t *) boot_alloc(PGSIZE);
 	memset(kern_pgdir, 0, PGSIZE);
-	
+
 	//////////////////////////////////////////////////////////////////////
 	// Recursively insert PD in itself as a page table, to form
 	// a virtual page table at virtual address UVPT.
@@ -541,26 +546,79 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 	// First we need to assert the sizes and addresses
 
 	size = ROUNDUP(size, PGSIZE);
-
 	assert(va % PGSIZE == 0);
 	assert(pa % PGSIZE == 0);
 	assert(size % PGSIZE == 0);
 
-	for(size_t i = 0; i < size/PGSIZE; i++){
-		// okay what does pgdir_walk do? It returns a pointer to the page table entry 
-		// what do we need to give pgdir_walk? 
-		// 1) pgdir_address = pgdir
-		// 2) va = va
-		// 3) create? probably yeah 
+	// if PS flag is set, we will be working with 4MB pages
+	if(perm & PTE_PS){
 
-		//pte_t * pt_entry = pgdir_walk(pgdir, va, 1); // this was only accessing the first page
-		pte_t * pt_entry = pgdir_walk(pgdir, (void *) va + i * PGSIZE, 1);
+		// reformatting the usual mapping to use HPGSIZE
+		for(size_t i = 0; i < size/HPGSIZE; i++){
+			
+			// we cannot use pgdir_walk because it will try accessing second level page tables
+			//pt_entry = pgdir_walk(pgdir, (void *) va + i * HPGSIZE, 1);
+
+			// we use the PDX macro to get the page directory entry
+			pde_t * pd_entry = pgdir + PDX(va + i * HPGSIZE);
+
+			if(pd_entry != NULL){
+				*pd_entry = (pa + i * HPGSIZE) | perm | PTE_P | PTE_PS;
+			}
+
+
+			// in the trivial 4KB case, pgdir_walk would have created a page
+			// and returned NULL only if it didn't have any pages left
+			// in the 4MB case, if pt_entry == NULL, we have to allocate a 4MB page in memory.
+			// I will use boot_alloc for that, but I am doubtful. 
+			else{
+				//TESTING SPACE FOR E6
 				
-		// we dereference the page table entry, so we get the address of the page
-		if(pt_entry != NULL){
-			*pt_entry = (pa + i*PGSIZE) | perm | PTE_P;
-		}
+				// // from page_alloc
+				// struct PageInfo * pagebig = page_free_list;
+				
+				// // If there are no free pages, we need to return NULL, indicating an error
+				// // using assert instead
+				// assert(pagebig != NULL);
+				// cprintf("%p\n", pagebig);
+				// page_free_list = pagebig->pp_link;
+				// //page_pop->pp_ref = 1; // Mark in-use
+				// pagebig->pp_link = NULL; 
+				
+				// cprintf("%p\n", page_free_list);
+				// //struct PageInfo *ptr = page2kva(pagebig); // Convert physical page address to virtual
+				
+				cprintf("%p\n", boot_alloc(0));
+				struct PageInfo *ptr = boot_alloc(0);
+				cprintf("boot_alloc'd: %p\n", ptr);
 
+				//memset(ptr, 0, PGSIZE); // works, but we knew that
+				memset(ptr, 0, HPGSIZE); // does not work :(
+				
+				cprintf("big page: %p\n", ptr);
+				cprintf("%p\n", pages);
+
+				panic("if we get here, e6 works\n");
+			}
+		}
+	}
+
+	else{
+		for(size_t i = 0; i < size/PGSIZE; i++){
+			// okay what does pgdir_walk do? It returns a pointer to the page table entry 
+			// what do we need to give pgdir_walk? 
+			// 1) pgdir_address = pgdir
+			// 2) va = va
+			// 3) create? probably yeah 
+
+			//pte_t * pt_entry = pgdir_walk(pgdir, va, 1); // this was only accessing the first page
+			pte_t * pt_entry = pgdir_walk(pgdir, (void *) va + i * PGSIZE, 1);
+					
+			// we dereference the page table entry, so we get the address of the page
+			if(pt_entry != NULL){
+				*pt_entry = (pa + i*PGSIZE) | perm | PTE_P;
+			}
+		}
 	}
 }
 

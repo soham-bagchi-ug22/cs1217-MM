@@ -48,6 +48,21 @@
 #define PGSIZE		4096		// bytes mapped by a page
 #define PGSHIFT		12		// log2(PGSIZE)
 
+// Macros and Constants for 4MB Pages - S.B.
+// xxxx xxxx xx xx xxxx xxxx xxxx xxxx xxxx - 32bit
+// DDDD DDDD DD OO OOOO OOOO OOOO OOOO OOOO - D => Directory, O => OFFSET
+// \----10----/ \-----------22------------/
+// 0000 0000 00 11 1111 1111 1111 1111 1111
+//    0    0     3    F    F    F    F    F
+// 1111 1111 11 00 0000 0000 0000 0000 0000
+//    F    F     C    0
+// Since Page Directory Index is still the first 10 bits, just like
+// 4KB pages, we only need to create a Macro for accessing the Offset
+
+#define HPGSIZE			4096*1024 // 4096 = 4KB, 4KB * 1024 = 4MB
+#define HPGOFF(la)		(((uintptr_t) (la)) & 0x003FFFFF)
+#define HPTE_ADDR(hpte) ((physaddr_t) (hpte) & 0xFFC00000)
+
 #define PTSIZE		(PGSIZE*NPTENTRIES) // bytes mapped by a page directory entry
 #define PTSHIFT		22		// log2(PTSIZE)
 

@@ -76,6 +76,14 @@ pa2page(physaddr_t pa)
 	return &pages[PGNUM(pa)];
 }
 
+
+// doesn't work because pgdir is not defined here
+// static inline struct PageInfo*
+// hpa2page(physaddr_t pa)
+// {
+// 	return (&pages - 1)[HPGOFF(pa)];
+// }
+
 static inline void*
 page2kva(struct PageInfo *pp)
 {
